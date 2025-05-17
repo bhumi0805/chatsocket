@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Topic Chat App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0; padding: 20px;
+      background: #f0f2f5;
+    }
+
+    /* Container */
+    #dashboard, #chat {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+      padding: 20px;
+    }
+
+    /* Topics List */
+    #topicsList {
+      list-style: none;
+      padding: 0;
+      margin-top: 15px;
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+
+    #topicsList li {
+      padding: 12px 15px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+
+    #topicsList li:hover {
+      background: #f7f9fc;
+    }
+
+    /* Create topic input + button */
+    #newTopicInput {
+      width: calc(100% - 110px);
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 4px 0 0 4px;
+      outline: none;
+    }
+    #createTopicBtn {
+      width: 90px;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-left: none;
+      background: #007bff;
+      color: white;
+      cursor: pointer;
+      border-radius: 0 4px 4px 0;
+      transition: background 0.3s ease;
+    }
+    #createTopicBtn:hover {
+      background: #0056b3;
+    }
+
+    /* Chat styles */
+    #chat {
+      display: none;
+      flex-direction: column;
+      height: 500px;
+    }
+
+    #chatHeader {
+      font-weight: bold;
+      margin-bottom: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #messages {
+      flex: 1;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+      overflow-y: auto;
+      margin-bottom: 15px;
+      background: #f9f9f9;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Messages styling */
+
+    /* Other users' messages (left aligned) */
+    .message-other {
+      background: #007bff;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 20px;
+      max-width: 70%;
+      word-wrap: break-word;
+      align-self: flex-start;
+      text-align: left;
+    }
+
+    /* User's own message (right aligned) */
+    .message-own {
+      background: #28a745;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 20px;
+      max-width: 70%;
+      word-wrap: break-word;
+      align-self: flex-end;
+      text-align: right;
+    }
+
+    /* Chat input and button */
+    #messageInput {
+      padding: 12px;
+      font-size: 16px;
+      flex-grow: 1;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      outline: none;
+    }
+    #sendBtn {
+      padding: 12px 20px;
+      margin-left: 10px;
+      font-size: 16px;
+      border: none;
+      background: #28a745;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    #sendBtn:hover {
+      background: #1e7e34;
+    }
+
+    /* Back button */
+    #backBtn {
+      background: #6c757d;
+      border: none;
+      color: white;
+      padding: 6px 12px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    #backBtn:hover {
+      background: #5a6268;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Dashboard (topics + create) -->
+  <div id="dashboard">
+    <h2>Topics</h2>
+    <div style="display:flex; margin-bottom: 10px;">
+      <input id="newTopicInput" placeholder="Create new topic" />
+      <button id="createTopicBtn">Create</button>
+    </div>
+    <ul id="topicsList"></ul>
+  </div>
+
+  <!-- Chat window -->
+  <div id="chat">
+    <div id="chatHeader">
+      <button id="backBtn">← Back</button>
+      <span id="chatTopicTitle">Chat</span>
+      <span></span> <!-- empty span for spacing -->
+    </div>
+
+    <div id="messages"></div>
+
+    <div style="display:flex;">
+      <input id="messageInput" placeholder="Type your message..." />
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    // DOM references
+    const dashboard = document.getElementById('dashboard');
+    const chat = document.getElementById('chat');
+    const topicsList = document.getElementById('topicsList');
+    const newTopicInput = document.getElementById('newTopicInput');
+    const createTopicBtn = document.getElementById('createTopicBtn');
+    const backBtn = document.getElementById('backBtn');
+    const chatTopicTitle = document.getElementById('chatTopicTitle');
+    const messagesDiv = document.getElementById('messages');
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    let currentTopic = null;
+
+    // Load initial topics list from server
+    socket.on('topicsList', (topics) => {
+      renderTopics(topics);
+    });
+
+    // Render topic list UI
+    function renderTopics(topics) {
+      topicsList.innerHTML = '';
+      topics.forEach(topic => {
+        const li = document.createElement('li');
+        li.textContent = topic;
+        li.onclick = () => openChat(topic);
+        topicsList.appendChild(li);
+      });
+    }
+
+    // Create topic button clicked
+    createTopicBtn.onclick = () => {
+      const topicName = newTopicInput.value.trim();
+      if(topicName) {
+        socket.emit('createTopic', topicName);
+        newTopicInput.value = '';
+      }
+    };
+
+    // When user clicks on a topic to open chat
+    function openChat(topic) {
+      currentTopic = topic;
+      chatTopicTitle.textContent = `Chat: ${topic}`;
+      dashboard.style.display = 'none';
+      chat.style.display = 'flex';
+      messagesDiv.innerHTML = '';
+      messageInput.value = '';
+      messageInput.focus();
+      socket.emit('joinTopic', topic);
+    }
+
+    // Back button to go back to dashboard
+    backBtn.onclick = () => {
+      currentTopic = null;
+      chat.style.display = 'none';
+      dashboard.style.display = 'block';
+      messagesDiv.innerHTML = '';
+    };
+
+    // Receive chat history after joining topic
+    socket.on('chatHistory', (messages) => {
+      messagesDiv.innerHTML = '';
+      messages.forEach(msg => {
+        addMessage(msg);
+      });
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    });
+
+    // Receive new messages
+    socket.on('newMessage', (msg) => {
+      if(msg.topic === currentTopic) {
+        addMessage(msg);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+    });
+
+    // Send message button clicked
+    sendBtn.onclick = () => {
+      const message = messageInput.value.trim();
+      if(message && currentTopic) {
+        socket.emit('topicMessage', { topicName: currentTopic, message });
+        messageInput.value = '';
+      }
+    };
+
+    // Add message to chat window with alignment based on user
+    function addMessage(msg) {
+      const div = document.createElement('div');
+      div.textContent = `[${msg.time}] ${msg.id.substr(0,5)}: ${msg.message}`;
+
+      if (msg.id === socket.id) {
+        div.classList.add('message-own');
+      } else {
+        div.classList.add('message-other');
+      }
+
+      messagesDiv.appendChild(div);
+    }
+  </script>
+
+</body>
+</html>
